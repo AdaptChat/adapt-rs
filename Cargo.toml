@@ -1,5 +1,5 @@
 [package]
-name = "adapt_chat"
+name = "adapt"
 version = "0.1.0"
 edition = "2021"
 
