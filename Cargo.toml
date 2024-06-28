@@ -1,7 +1,10 @@
 [package]
 name = "adapt"
-version = "0.0.0"
+version = "0.0.0-alpha0"
 edition = "2021"
+description = "Official wrapper around for the Adapt chat platform API."
+license = "MIT"
+repository = "https://github.com/adaptchat/adapt-rs"
 
 # TODO: Add feature for HTTP
 [dependencies]
