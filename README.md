@@ -7,8 +7,12 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-adapt = "0"
+adapt = { git = "https://github.com/adaptchat/adapt-rs" }
 ```
+
+## Requirements
+
+- Rust 1.80 **nightly** or later
 
 ## Example
 

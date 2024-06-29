@@ -1,6 +1,7 @@
-//! Low-level API wrapper for the Adapt REST and WebSocket APIs.
-
-extern crate core;
+#![doc = include_str!("../README.md")]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![feature(macro_metavar_expr)]
 
 mod error;
 pub mod http;
