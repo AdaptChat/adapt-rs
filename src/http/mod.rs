@@ -17,6 +17,10 @@ use reqwest::{
     header::{HeaderMap, HeaderName, AUTHORIZATION},
     Client,
 };
+#[cfg(feature = "simd")]
+use simd_json as json;
+#[cfg(not(feature = "simd"))]
+use serde_json as json;
 use serde::{de::DeserializeOwned, ser::Serialize};
 
 /// A utility constant which is the base URL for the production (main) server of Adapt's API.
@@ -25,7 +29,7 @@ pub const BASE_URL: &str = AdaptServerUri::Production.as_str();
 /// An enumeration of all pre-defined Adapt API base endpoints.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum AdaptServerUri<'a> {
-    /// The production Adapt endpoint (`https://adapt.lambdabot.cf`). This is the default.
+    /// The production Adapt endpoint (`https://api.adapt.chat`). This is the default.
     #[default]
     Production,
     /// Localhost URI (`http://127.0.0.1:8077`) if you were to self-host Adapt.
@@ -40,7 +44,7 @@ impl<'a> AdaptServerUri<'a> {
     #[must_use]
     pub const fn as_str(&self) -> &'a str {
         match self {
-            Self::Production => "https://adapt.lambdabot.cf",
+            Self::Production => "https://api.adapt.chat",
             Self::Local => "http://127.0.0.1:8077",
             Self::Custom(uri) => uri,
         }
@@ -96,10 +100,7 @@ impl<'a, E: Endpoint, S: Serialize> Request<'a, E, S> {
             .headers(self.headers);
 
         if let Some(body) = self.body {
-            #[cfg(feature = "simd-json")]
-            let body = simd_json::to_string(&body).unwrap();
-            #[cfg(not(feature = "simd-json"))]
-            let body = serde_json::to_string(&body).unwrap();
+            let body = json::to_string(&body).unwrap();
 
             request = request
                 .body(body)
@@ -111,18 +112,12 @@ impl<'a, E: Endpoint, S: Serialize> Request<'a, E, S> {
         let reader = response.bytes().await?.reader();
 
         if (400..=599).contains(&status) {
-            #[cfg(feature = "simd-json")]
-            let error = simd_json::from_reader(reader)?;
-            #[cfg(not(feature = "simd-json"))]
-            let error = serde_json::from_reader(reader)?;
+            let error = json::from_reader(reader)?;
 
             return Err(Error::Adapt(error));
         }
 
-        #[cfg(feature = "simd-json")]
-        let data = simd_json::from_reader(reader);
-        #[cfg(not(feature = "simd-json"))]
-        let data = serde_json::from_reader(reader);
+        let data = json::from_reader(reader);
 
         data.map_err(Into::into)
     }
@@ -407,7 +402,6 @@ mod tests {
     use super::*;
     use std::println;
 
-    // #[tokio::test]
     #[tokio::test]
     async fn get_channel() -> crate::Result<()> {
         let http = Http::login("crypteballs2@gmail.com", "crypte", Default::default()).await?;
