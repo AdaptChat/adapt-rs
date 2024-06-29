@@ -8,6 +8,7 @@ use reqwest::{
     header::{HeaderMap, HeaderName, AUTHORIZATION},
     Client,
 };
+use secrecy::{ExposeSecret, SecretString};
 #[cfg(not(feature = "simd"))]
 use serde_json as json;
 #[cfg(feature = "simd")]
@@ -172,7 +173,7 @@ impl<'a, E: Endpoint> Request<'a, E> {
 pub struct Http {
     client: Client,
     server: String,
-    token: String,
+    token: SecretString,
 }
 
 impl Http {
@@ -206,7 +207,7 @@ impl Http {
         Self {
             client,
             server: uri.as_str().to_string(),
-            token: token.as_ref().to_string(),
+            token: SecretString::new(token.as_ref().to_string()),
         }
     }
 
@@ -248,7 +249,7 @@ impl Http {
             })
             .await?;
 
-        slf.token = user.token;
+        slf.token = SecretString::new(user.token);
         Ok(slf)
     }
 
@@ -297,14 +298,15 @@ impl Http {
     /// anyone.
     #[inline]
     #[must_use]
-    pub fn token(&self) -> &str {
+    pub const fn token(&self) -> &SecretString {
         &self.token
     }
 
     /// Creates a new outgoing HTTP request to the given endpoint. The request takes and returns raw
     /// models from [`essence`].
     pub fn request<E: Endpoint>(&self, endpoint: E) -> Request<E> {
-        Request::new(&self.client, &self.server, endpoint).header(AUTHORIZATION, &self.token)
+        let token = self.token.expose_secret();
+        Request::new(&self.client, &self.server, endpoint).header(AUTHORIZATION, token)
     }
 }
 
