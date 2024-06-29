@@ -1,3 +1,5 @@
+use crate::ws;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An error that occurs within the crate.
@@ -12,6 +14,7 @@ pub enum Error {
     Deserialization(serde_json::Error),
     /// An error was returned from the Adapt.
     Adapt(essence::Error),
+    WsError(ws::WsError),
 }
 
 impl From<reqwest::Error> for Error {
@@ -31,5 +34,11 @@ impl From<serde_json::Error> for Error {
 impl From<simd_json::Error> for Error {
     fn from(err: simd_json::Error) -> Self {
         Self::Deserialization(err)
+    }
+}
+
+impl From<ws::WsError> for Error {
+    fn from(err: ws::WsError) -> Self {
+        Self::WsError(err)
     }
 }
