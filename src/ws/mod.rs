@@ -8,6 +8,7 @@ use essence::{
 };
 use futures_util::{SinkExt, StreamExt};
 use rmp_serde::to_vec_named;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
@@ -26,7 +27,7 @@ enum WsAction {
 pub struct WsClient {
     ws: WebSocketStream<MaybeTlsStream<TcpStream>>,
     url: String,
-    token: String,
+    token: SecretString,
     status: PresenceStatus,
     device: Device,
     last_heartbeat_sent: Instant,
@@ -36,7 +37,7 @@ pub struct WsClient {
 impl WsClient {
     pub async fn connect(
         url: String,
-        token: String,
+        token: SecretString,
         status: PresenceStatus,
         device: Device,
     ) -> Result<Self> {
@@ -96,7 +97,7 @@ impl WsClient {
         }
 
         self.send(&InboundMessage::Identify {
-            token: self.token.clone(),
+            token: self.token.expose_secret().clone(),
             status: self.status,
             device: self.device,
         })
