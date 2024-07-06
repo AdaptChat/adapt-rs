@@ -1,6 +1,6 @@
 pub mod endpoints;
 
-use crate::Error;
+use crate::{Error, Server};
 use bytes::Buf;
 use endpoints::Endpoint;
 use essence::http;
@@ -21,44 +21,47 @@ use std::{
 pub use http::auth::TokenRetrievalMethod;
 
 /// A utility constant which is the base URL for the production (main) server of Adapt's API.
-pub const BASE_URL: &str = AdaptServerUri::Production.as_str();
+pub const BASE_URL: &str = Server::production().api;
 
-/// An enumeration of all pre-defined Adapt API base endpoints.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum AdaptServerUri<'a> {
-    /// The production Adapt endpoint (`https://api.adapt.chat`). This is the default.
-    #[default]
-    Production,
-    /// Localhost URI (`http://127.0.0.1:8077`) if you were to self-host Adapt.
-    Local,
-    /// Custom URI.
-    Custom(&'a str),
+/// Wrapper type around a valid URL for the Adapt REST API.
+/// Defaults to the official instance (`https://api.adapt.chat`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct BaseUrl<'a>(&'a str);
+
+impl Default for BaseUrl<'static> {
+    #[inline]
+    fn default() -> Self {
+        Self(BASE_URL)
+    }
 }
 
-impl<'a> AdaptServerUri<'a> {
-    /// Returns the URI as a string.
+impl<'a> BaseUrl<'a> {
+    /// Returns the inner URI.
     #[inline]
     #[must_use]
-    pub const fn as_str(&self) -> &'a str {
-        match self {
-            Self::Production => "https://api.adapt.chat",
-            Self::Local => "http://127.0.0.1:8077",
-            Self::Custom(uri) => uri,
-        }
+    pub const fn get(&self) -> &'a str {
+        self.0
     }
 }
 
-impl<'a> From<&'a str> for AdaptServerUri<'a> {
+impl<'a> From<&'a str> for BaseUrl<'a> {
     #[inline]
     fn from(uri: &'a str) -> Self {
-        Self::Custom(uri)
+        Self(uri)
     }
 }
 
-impl<'a> From<AdaptServerUri<'a>> for &'a str {
+impl<'a> From<BaseUrl<'a>> for &'a str {
     #[inline]
-    fn from(uri: AdaptServerUri<'a>) -> Self {
-        uri.as_str()
+    fn from(uri: BaseUrl<'a>) -> Self {
+        uri.get()
+    }
+}
+
+impl<'a> From<Server<'a>> for BaseUrl<'a> {
+    #[inline]
+    fn from(server: Server<'a>) -> Self {
+        Self(server.api)
     }
 }
 
@@ -139,13 +142,10 @@ impl<'a, E: Endpoint> Request<'a, E> {
 
         if (400..=599).contains(&status) {
             let error = json::from_reader(reader)?;
-
-            return Err(Error::Adapt(error));
+            return Err(Error::Http(error));
         }
 
-        let data = json::from_reader(reader);
-
-        data.map_err(Into::into)
+        json::from_reader(reader).map_err(Into::into)
     }
 }
 
@@ -181,12 +181,12 @@ impl Http {
     ///
     /// # Example
     /// ```no_run
-    /// # use adapt::http::{AdaptServerUri, Http};
+    /// # use adapt::{Server, http::Http};
     ///
     /// # #[tokio::main]
     /// # async fn main() -> adapt::Result<()> {
     /// let token = std::env::var("ADAPT_TOKEN").expect("missing Adapt token");
-    /// let http = Http::from_token_and_uri(token, AdaptServerUri::Production);
+    /// let http = Http::from_token_and_uri(token, Server::production());
     /// # Ok(()) }
     /// ```
     ///
@@ -194,7 +194,7 @@ impl Http {
     /// * If an error occurs while creating the client.
     /// * If the token is not a valid header value.
     #[must_use]
-    pub fn from_token_and_uri(token: impl AsRef<str>, uri: AdaptServerUri) -> Self {
+    pub fn from_token_and_uri<'a>(token: impl AsRef<str>, uri: impl Into<BaseUrl<'a>>) -> Self {
         let client = reqwest::ClientBuilder::new()
             .user_agent(concat!(
                 env!("CARGO_PKG_NAME"),
@@ -206,20 +206,20 @@ impl Http {
 
         Self {
             client,
-            server: uri.as_str().to_string(),
+            server: uri.into().get().to_string(),
             token: SecretString::new(token.as_ref().to_string()),
         }
     }
 
     /// Creates a new HTTP client with the given token and the default Adapt server URI.
-    /// See [`AdaptServerUri`] for more information of what this is.
+    /// See [`BaseUrl`] for more information of what this is.
     ///
     /// # Panics
     /// * If an error occurs while creating the client.
     /// * If the token is not a valid header value.
     #[must_use]
     pub fn from_token(token: impl AsRef<str>) -> Self {
-        Self::from_token_and_uri(token, AdaptServerUri::Production)
+        Self::from_token_and_uri(token, BaseUrl::default())
     }
 
     /// Logs into the given user account with credentials (email and password) and creates
@@ -234,7 +234,7 @@ impl Http {
     /// * [`TokenRetrievalMethod`] which is used to determine how the token is retrieved.
     /// * [`Self::login`] which is a convenience method for logging in with the production server.
     pub async fn login_on(
-        server: AdaptServerUri<'_>,
+        server: impl Into<BaseUrl<'_>>,
         email: impl AsRef<str> + Send,
         password: impl AsRef<str> + Send,
         retrieval_method: TokenRetrievalMethod,
@@ -262,7 +262,7 @@ impl Http {
     ///
     /// # Example
     /// ```no_run
-    /// use adapt::http::{AdaptServerUri, Http, TokenRetrievalMethod, endpoints::GetAllGuilds};
+    /// use adapt::http::{Http, TokenRetrievalMethod, endpoints::GetAllGuilds};
     ///
     /// #[tokio::main]
     /// async fn main() -> adapt::Result<()> {
@@ -285,13 +285,7 @@ impl Http {
         password: impl AsRef<str> + Send,
         retrieval_method: TokenRetrievalMethod,
     ) -> crate::Result<Self> {
-        Self::login_on(
-            AdaptServerUri::Production,
-            email,
-            password,
-            retrieval_method,
-        )
-        .await
+        Self::login_on(BaseUrl::default(), email, password, retrieval_method).await
     }
 
     /// Returns the authentication token for this client. You should not expose this value to

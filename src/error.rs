@@ -1,5 +1,3 @@
-use crate::ws;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An error that occurs within the crate.
@@ -12,9 +10,11 @@ pub enum Error {
     Deserialization(simd_json::Error),
     #[cfg(not(feature = "simd"))]
     Deserialization(serde_json::Error),
-    /// An error was returned from the Adapt.
-    Adapt(essence::Error),
-    WsError(ws::WsError),
+    /// An HTTP error was returned from the Adapt REST API.
+    Http(essence::Error),
+    #[cfg(feature = "ws")]
+    /// An error occured within Adapt's gateway.
+    Harmony(crate::ws::Error),
 }
 
 impl From<reqwest::Error> for Error {
@@ -37,8 +37,8 @@ impl From<simd_json::Error> for Error {
     }
 }
 
-impl From<ws::WsError> for Error {
-    fn from(err: ws::WsError) -> Self {
-        Self::WsError(err)
+impl From<crate::ws::Error> for Error {
+    fn from(err: crate::ws::Error) -> Self {
+        Self::Harmony(err)
     }
 }
