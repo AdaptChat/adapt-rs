@@ -1,15 +1,16 @@
-pub mod error;
+//! A module for interacting with Harmony, Adapt's gateway.
 
-use essence::{
-    models::{Device, PresenceStatus},
-    ws::{InboundMessage, OutboundMessage},
-};
+pub mod error;
+mod handler;
+
+use essence::models::{Device, PresenceStatus};
 use futures_util::{SinkExt, StreamExt};
 use rmp_serde::to_vec_named;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
-use std::future::{Future, IntoFuture};
-use std::time::{Duration, Instant};
+use std::{
+    future::{Future, IntoFuture},
+    time::{Duration, Instant},
+};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async_with_config,
@@ -20,7 +21,9 @@ use url::Url;
 
 use crate::Server;
 pub use error::{Error, Result};
+pub use essence::ws::{InboundMessage as OutboundMessage, OutboundMessage as InboundMessage};
 
+#[allow(dead_code)] // TODO
 enum WsAction {
     Reconnect,
 }
@@ -99,7 +102,7 @@ impl ConnectOptions {
 
     /// Sets the status to initially set the client's presence to.
     #[inline]
-    pub fn status(mut self, status: PresenceStatus) -> Self {
+    pub const fn status(mut self, status: PresenceStatus) -> Self {
         self.status = status;
         self
     }
@@ -113,7 +116,7 @@ impl ConnectOptions {
 
     /// Sets the device to identify as.
     #[inline]
-    pub fn device(mut self, device: Device) -> Self {
+    pub const fn device(mut self, device: Device) -> Self {
         self.device = device;
         self
     }
@@ -141,8 +144,8 @@ struct PartialIdentify {
 }
 
 impl PartialIdentify {
-    fn into_identify(self, token: &SecretString) -> InboundMessage {
-        InboundMessage::Identify {
+    fn into_identify(self, token: &SecretString) -> OutboundMessage {
+        OutboundMessage::Identify {
             token: token.expose_secret().clone(),
             status: self.status,
             custom_status: self.custom_status,
@@ -163,14 +166,9 @@ pub struct Client {
 
 impl Client {
     /// The timeout for receiving a message from the gateway.
-    pub const TIMEOUT: Duration = Duration::from_millis(800);
+    pub const TIMEOUT: Duration = Duration::from_millis(500);
 
     /// The interval at which the client should send heartbeats to the gateway.
-    ///
-    /// # Note
-    /// Currently, since Harmony does not require heartbeats to be sent at a consistent interval,
-    /// this value is actually the lowest interval that can pass from the last heartbeat before the
-    /// client sends another one.
     pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 
     /// Initializes a new client and connects to the gateway.
@@ -201,13 +199,15 @@ impl Client {
         })
     }
 
-    async fn send(&mut self, value: &impl Serialize) -> Result<()> {
+    async fn send(&mut self, value: &OutboundMessage) -> Result<()> {
         self.ws.send(Message::Binary(to_vec_named(value)?)).await?;
 
         Ok(())
     }
 
-    async fn next(&mut self) -> Result<Option<OutboundMessage>> {
+    /// Polls the websocket for the next message, or `None` if no messages can be received within
+    /// [`Self::TIMEOUT`].
+    pub async fn poll(&mut self) -> Result<Option<InboundMessage>> {
         let message = match tokio::time::timeout(Self::TIMEOUT, self.ws.next()).await {
             Ok(Some(Ok(message))) => message,
             Ok(Some(Err(err))) => return Err(err.into()),
@@ -224,46 +224,65 @@ impl Client {
         Ok(Some(decoded))
     }
 
+    /// Sends an identify message to the gateway.
     pub async fn send_identify(&mut self) -> Result<()> {
+        debug!("Sending identify");
         let identify = self.identify.clone().into_identify(&self.token);
         self.send(&identify).await
     }
 
-    async fn start(&mut self) -> Result<()> {
-        tokio::select! {
-            _ = self.keep_alive() => { Ok(()) }
-            _ = self.runner() => { Ok(()) }
-        }
+    /// Sends a heartbeat to the gateway.
+    pub async fn send_heartbeat(&mut self) -> Result<()> {
+        debug!("Sending heartbeat");
+        self.send(&OutboundMessage::Ping).await?;
+        self.last_heartbeat_sent = Instant::now();
+        Ok(())
     }
 
-    async fn keep_alive(&mut self) -> Result<()> {
-        loop {
-            tokio::time::sleep(Self::HEARTBEAT_INTERVAL).await;
-            self.send(&InboundMessage::Ping).await?;
-            self.last_heartbeat_sent = Instant::now();
-        }
+    /// Sends a presence update request to the gateway.
+    pub async fn send_update_presence(
+        &mut self,
+        status: PresenceStatus,
+        custom_status: Option<String>,
+    ) -> Result<()> {
+        let payload = OutboundMessage::UpdatePresence {
+            status,
+            custom_status,
+        };
+        self.send(&payload).await
     }
 
-    pub async fn runner(&mut self) -> Result<()> {
-        if !matches!(self.next().await?, Some(OutboundMessage::Hello)) {
+    async fn handle_message(&mut self, message: &InboundMessage) -> Result<()> {
+        match message {
+            InboundMessage::Ping => {
+                self.send(&OutboundMessage::Pong).await?;
+                debug!("Acknowledged ping");
+            }
+            InboundMessage::Pong => {
+                self.latency = Some(self.last_heartbeat_sent.elapsed());
+                debug!("Heartbeat acknowledged, latency: {:?}", self.latency);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Runs the client's main loop for this session.
+    pub async fn start(&mut self) -> Result<()> {
+        if !matches!(self.poll().await?, Some(InboundMessage::Hello)) {
             return Err(Error::NoHello);
         }
 
         self.send_identify().await?;
-        while let Some(message) = self.next().await? {
-            match message {
-                OutboundMessage::Ping => {
-                    self.send(&InboundMessage::Pong).await?;
-                }
-                OutboundMessage::Pong => {
-                    self.latency = Some(self.last_heartbeat_sent.elapsed());
-                }
-                _ => {}
+        loop {
+            // Send heartbeats at consistent intervals
+            if self.last_heartbeat_sent.elapsed() >= Self::HEARTBEAT_INTERVAL {
+                self.send_heartbeat().await?;
+            }
+
+            if let Some(message) = self.poll().await? {
+                self.handle_message(&message).await?;
             }
         }
-
-        todo!();
-
-        Ok(())
     }
 }

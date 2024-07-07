@@ -4,6 +4,9 @@
 #![feature(macro_metavar_expr)]
 #![feature(impl_trait_in_assoc_type)]
 
+#[macro_use]
+extern crate log;
+
 mod error;
 pub mod http;
 mod server;

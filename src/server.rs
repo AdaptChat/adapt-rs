@@ -1,5 +1,6 @@
 /// A collection of URLs used when interacting with the Adapt API.
 #[derive(Copy, Clone, Debug)]
+#[must_use = "Server instances do nothing on their own"]
 pub struct Server<'a> {
     /// The base URL for the REST API.
     pub api: &'a str,

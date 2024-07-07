@@ -234,7 +234,7 @@ impl Http {
     /// * [`TokenRetrievalMethod`] which is used to determine how the token is retrieved.
     /// * [`Self::login`] which is a convenience method for logging in with the production server.
     pub async fn login_on(
-        server: impl Into<BaseUrl<'_>>,
+        server: impl Into<BaseUrl<'_>> + Send,
         email: impl AsRef<str> + Send,
         password: impl AsRef<str> + Send,
         retrieval_method: TokenRetrievalMethod,

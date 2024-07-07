@@ -10,6 +10,13 @@ Add the following to your `Cargo.toml`:
 adapt = { git = "https://github.com/adaptchat/adapt-rs" }
 ```
 
+### Cargo Features
+
+| Feature | Default | Description                                              |
+|---------|---------|----------------------------------------------------------|
+| `ws`    | Yes     | Enables receiving events over Harmony, Adapt's gateway.  |
+| `simd`  | No      | Enables SIMD speedups for JSON parsing via `simd-json`.  |
+
 ## Requirements
 
 - Rust 1.80 **nightly** or later
