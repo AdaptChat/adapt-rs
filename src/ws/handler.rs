@@ -1,22 +1,92 @@
-use super::InboundMessage;
+use futures_util::future::BoxFuture;
 use std::future::{Future, IntoFuture};
+
+use super::Event;
+use crate::{models::Message, Context, WithCtx};
 
 /// Represents a generic event consumer for gateway dispatch events.
 pub trait EventConsumer: Send + Sync {
     /// Called when a dispatch event is received.
-    async fn handle_event(&mut self, event: InboundMessage);
+    fn handle_event(&self, event: Event) -> impl Future<Output = ()> + Send;
 }
 
 struct FnConsumer<F>(F);
 
 impl<F, Fut: IntoFuture> EventConsumer for FnConsumer<F>
 where
-    F: Fn(InboundMessage) -> Fut + Send + Sync,
+    F: Fn(Event) -> Fut + Send + Sync,
     Fut::IntoFuture: Send,
 {
-    async fn handle_event(&mut self, event: InboundMessage) {
+    async fn handle_event(&self, event: Event) {
         (self.0)(event).await;
     }
+}
+
+macro_rules! all_the_tuples {
+    ($name:ident) => {
+        $name!(T1, T2);
+        $name!(T1, T2, T3);
+        $name!(T1, T2, T3, T4);
+        $name!(T1, T2, T3, T4, T5);
+        $name!(T1, T2, T3, T4, T5, T6);
+        $name!(T1, T2, T3, T4, T5, T6, T7);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15);
+        $name!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16);
+    };
+}
+
+macro_rules! impl_compound_handlers {
+    ($($t:ident),*) => {
+        impl<$($t),*> EventConsumer for ($($t),*)
+        where
+            $($t: EventConsumer),*
+        {
+            async fn handle_event(&self, event: Event) {
+                tokio::join!($($t::handle_event(&self.${index()}, event.clone())),*);
+            }
+        }
+    }
+}
+
+all_the_tuples!(impl_compound_handlers);
+
+pub(crate) trait EventConsumerErased: Send + Sync {
+    fn dyn_handle_event(&self, event: Event) -> BoxFuture<()>;
+}
+
+impl<T: EventConsumer> EventConsumerErased for T {
+    fn dyn_handle_event(&self, event: Event) -> BoxFuture<()> {
+        Box::pin(EventConsumer::handle_event(self, event))
+    }
+}
+
+/// Creates a raw event consumer from a function.
+///
+/// # Example
+/// ```no_run
+/// use adapt::ws::handler;
+///
+/// let handler = handler::from_fn(|event| async move {
+///     println!("Received event: {:?}", event);
+/// });
+/// ```
+///
+/// # See Also
+/// * [`EventHandler`]: A trait for organizing event handler logic.
+/// * [`FallibleEventHandler`]: A trait for organizing event handler logic with error handling.
+pub fn from_fn<F, Fut: IntoFuture>(f: F) -> impl EventConsumer
+where
+    F: Fn(Event) -> Fut + Send + Sync,
+    Fut::IntoFuture: Send,
+{
+    FnConsumer(f)
 }
 
 macro_rules! define_event_handlers {
@@ -32,12 +102,12 @@ macro_rules! define_event_handlers {
             type Error: Send;
 
             /// Called when an error occurs while processing an event within this event handler.
-            fn on_error(&mut self, error: Self::Error) -> impl Future<Output = ()> + Send;
+            fn on_error(&self, error: Self::Error) -> impl Future<Output = ()> + Send;
 
             $(
                 $(#[$doc])*
                 fn $name(
-                    &mut self,
+                    &self,
                     $($param: $ty),*
                 ) -> impl Future<Output = Result<(), Self::Error>> + Send {
                     async {
@@ -49,9 +119,10 @@ macro_rules! define_event_handlers {
         }
 
         impl<E: FallibleEventHandler> EventConsumer for E {
-            async fn handle_event(&mut self, event: InboundMessage) {
-                use InboundMessage::*;
+            async fn handle_event(&self, event: Event) {
+                use Event::*;
 
+                #[allow(unreachable_patterns)]
                 if let Err(why) = match event {
                     $($pat => self.$name($($param),*).await,)*
                     _ => Ok(())
@@ -69,7 +140,7 @@ macro_rules! define_event_handlers {
         pub trait EventHandler: Send + Sync {
             $(
                 $(#[$doc])*
-                fn $name(&mut self, $($param: $ty),*) -> impl Future<Output = ()> + Send {
+                fn $name(&self, $($param: $ty),*) -> impl Future<Output = ()> + Send {
                     async {
                         let _ = ($($param),*);
                     }
@@ -80,11 +151,11 @@ macro_rules! define_event_handlers {
         impl<E: EventHandler> FallibleEventHandler for E {
             type Error = ();
 
-            async fn on_error(&mut self, _: Self::Error) {}
+            async fn on_error(&self, _: Self::Error) {}
 
             $(
                 $(#[$doc])*
-                async fn $name(&mut self, $($param: $ty),*) -> Result<(), Self::Error> {
+                async fn $name(&self, $($param: $ty),*) -> Result<(), Self::Error> {
                     EventHandler::$name(self, $($param),*).await;
                     Ok(())
                 }
@@ -94,33 +165,9 @@ macro_rules! define_event_handlers {
 }
 
 define_event_handlers! {
-    /// Called when Harmony requests a heartbeat from the client.
-    ///
-    /// # Note
-    /// This heartbeat is automatically sent by the client, this is for debugging purposes only.
-    Ping => on_heartbeat_request();
-
-    /// Called when a heartbeat from the client is acknowledged by Harmony.
-    Pong => on_heartbeat_ack();
-
     /// Called when the client is ready to receive events.
-    Ready { .. } => on_ready();
-}
+    Ready(context) => on_ready(context: Context);
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct TestHandler;
-
-    impl EventHandler for TestHandler {
-        async fn on_heartbeat_request(&mut self) {
-            println!("Received heartbeat request");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_event_handler() {
-        TestHandler.handle_event(InboundMessage::Ping).await;
-    }
+    /// Called when a message is sent.
+    MessageCreate(message) => on_message(message: WithCtx<Message>);
 }

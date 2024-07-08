@@ -8,6 +8,7 @@ pub enum Error {
     /// An error occured while deserializing a response from the Adapt API.
     #[cfg(feature = "simd")]
     Deserialization(simd_json::Error),
+    /// An error occured while deserializing a response from the Adapt API.
     #[cfg(not(feature = "simd"))]
     Deserialization(serde_json::Error),
     /// An HTTP error was returned from the Adapt REST API.

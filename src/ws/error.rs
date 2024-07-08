@@ -1,3 +1,5 @@
+use crate::ws::ConnectionAction;
+use tokio::sync::mpsc::error::SendError;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
 /// A type alias for `Result<T, Error>`.
@@ -8,6 +10,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     /// Unexpected message type received.
     UnexpectedMessageType,
+    /// An error occured trying to send a message to the connection.
+    Send(SendError<ConnectionAction>),
     /// An error occured while connecting to the websocket.
     Connect(tokio_tungstenite::tungstenite::Error),
     /// An error occured while encoding a message using [`rmp_serde`].
@@ -18,6 +22,8 @@ pub enum Error {
     Closed(Option<CloseFrame<'static>>),
     /// Expected a `hello` message from harmony, but received something else.
     NoHello,
+    /// There is no open connection to the gateway.
+    NoConnection,
 }
 
 impl From<tokio_tungstenite::tungstenite::Error> for Error {
@@ -35,5 +41,11 @@ impl From<rmp_serde::encode::Error> for Error {
 impl From<rmp_serde::decode::Error> for Error {
     fn from(err: rmp_serde::decode::Error) -> Self {
         Self::Decode(err)
+    }
+}
+
+impl From<SendError<ConnectionAction>> for Error {
+    fn from(err: SendError<ConnectionAction>) -> Self {
+        Self::Send(err)
     }
 }

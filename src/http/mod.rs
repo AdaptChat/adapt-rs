@@ -170,6 +170,7 @@ impl<'a, E: Endpoint> Request<'a, E> {
 ///     Ok(())
 /// }
 #[derive(Clone, Debug)]
+#[must_use = "this client does nothing on its own"]
 pub struct Http {
     client: Client,
     server: String,
@@ -193,7 +194,6 @@ impl Http {
     /// # Panics
     /// * If an error occurs while creating the client.
     /// * If the token is not a valid header value.
-    #[must_use]
     pub fn from_token_and_uri<'a>(token: impl AsRef<str>, uri: impl Into<BaseUrl<'a>>) -> Self {
         let client = reqwest::ClientBuilder::new()
             .user_agent(concat!(
@@ -217,7 +217,6 @@ impl Http {
     /// # Panics
     /// * If an error occurs while creating the client.
     /// * If the token is not a valid header value.
-    #[must_use]
     pub fn from_token(token: impl AsRef<str>) -> Self {
         Self::from_token_and_uri(token, BaseUrl::default())
     }
