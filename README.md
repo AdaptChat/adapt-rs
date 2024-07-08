@@ -12,10 +12,11 @@ adapt = { git = "https://github.com/adaptchat/adapt-rs" }
 
 ### Cargo Features
 
-| Feature | Default | Description                                              |
-|---------|---------|----------------------------------------------------------|
-| `ws`    | Yes     | Enables receiving events over Harmony, Adapt's gateway.  |
-| `simd`  | No      | Enables SIMD speedups for JSON parsing via `simd-json`.  |
+| Feature  | Default | Description                                                                                 |
+|----------|---------|---------------------------------------------------------------------------------------------|
+| `ws`     | Yes     | Enables receiving events over Harmony, Adapt's gateway.                                     |
+| `simd`   | No      | Enables SIMD speedups for JSON parsing via `simd-json`.                                     |
+| `chrono` | No      | Timestamps will be represented using `chrono::DateTime` instead of `std::time::SystemTime`. |
 
 ## Requirements
 
@@ -25,20 +26,24 @@ adapt = { git = "https://github.com/adaptchat/adapt-rs" }
 
 ```rust
 use adapt::prelude::*;
-use adapt::models::{Message, ReadyEvent};
+use adapt::models::Message;
 
 struct Handler;
 
-impl EventHandler for Handler {
+impl FallibleEventHandler for Handler {
     type Error = adapt::Error;
 
-    async fn ready(&self, event: &ReadyEvent) -> Result<()> {
-        info!("Logged in as {}", ?event.user);
+    async fn on_error(&self, _error: Self::Error) {
+        error!("An error occurred: {:?}", error);
+    }
+
+    async fn on_ready(&self, ctx: Context) -> Result<()> {
+        info!("Logged in as {:?}", context.user());
 
         Ok(())
     }
 
-    async fn message_create(&self, message: &Message) -> Result<()> {
+    async fn on_message(&self, message: WithCtx<Message>) -> Result<()> {
         if message.content.starts_with("!ping") {
             message.reply("Pong").await?;
         }

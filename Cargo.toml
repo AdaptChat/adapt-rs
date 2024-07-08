@@ -9,6 +9,7 @@ repository = "https://github.com/adaptchat/adapt-rs"
 # TODO: Add feature for HTTP
 [dependencies]
 bytes = "1"
+chrono = { version = "0.4", optional = true }
 essence = { version = "0.7", features = ["client"] }
 futures-util = "0.3"
 log = "0.4"
@@ -26,6 +27,7 @@ url = "2.5"
 default = ["ws"]
 simd = ["dep:simd-json"]
 ws = ["dep:tokio-tungstenite"]
+chrono = ["dep:chrono"]
 
 [patch.crates-io.essence]
 git = "https://github.com/adaptchat/essence"
