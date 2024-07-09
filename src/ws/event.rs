@@ -12,9 +12,9 @@ pub enum Event {
     MessageCreate(WithCtx<Message>),
 }
 
-pub fn populate(ctx: &Context, event: InboundMessage, pending: &mut Vec<Event>) {
+pub fn populate(ctx: Context, event: InboundMessage, pending: &mut Vec<Event>) {
     match event {
-        InboundMessage::Ready { .. } => pending.push(Event::Ready(ctx.clone())),
+        InboundMessage::Ready { .. } => pending.push(Event::Ready(ctx)),
         InboundMessage::MessageCreate { message, .. } => {
             pending.push(Event::MessageCreate(ctx.with(Message::from_raw(message))));
         }

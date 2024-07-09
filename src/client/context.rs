@@ -34,11 +34,8 @@ impl Context {
     }
 
     /// Wraps a value with the current context using [`WithCtx`].
-    pub fn with<T>(&self, inner: T) -> WithCtx<T> {
-        WithCtx {
-            inner,
-            ctx: self.clone(),
-        }
+    pub const fn with<T>(self, inner: T) -> WithCtx<T> {
+        WithCtx { inner, ctx: self }
     }
 }
 
@@ -54,6 +51,7 @@ impl Debug for Context {
 /// # See Also
 /// - [`Context`]: The client state itself.
 #[derive(Clone)]
+#[must_use]
 pub struct WithCtx<T> {
     /// The value being wrapped.
     pub(crate) inner: T,

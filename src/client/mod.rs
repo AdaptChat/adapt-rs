@@ -1,7 +1,5 @@
 //! Interact with Adapt using the client module.
 
-#![allow(clippy::module_name_repetitions)]
-
 mod context;
 
 #[cfg(feature = "ws")]

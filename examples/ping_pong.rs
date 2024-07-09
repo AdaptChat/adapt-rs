@@ -6,9 +6,9 @@ struct Handler;
 
 impl EventHandler for Handler {
     // This method is called when the bot is ready to receive events
-    async fn on_ready(&self, context: Context) {
+    async fn on_ready(&self, _context: Context) {
         // The context includes the user that the bot is logged in as
-        println!("Ready as {}", context.user().username);
+        // println!("Ready as {}", context.user().username);
     }
 
     // This method is called when a message is sent
@@ -16,9 +16,9 @@ impl EventHandler for Handler {
         // Check if the message content is "!ping"
         if message.content == "!ping" {
             // If so, reply to the message with "pong"
-            if let Err(e) = message.reply("pong").await {
+            if let Err(e) = message.channel_id().send("Pong").await {
                 // If an error occurs, print the error
-                eprintln!("Error replying to message: {e:?}")
+                eprintln!("Error replying to message: {e:?}");
             }
         }
     }

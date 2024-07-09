@@ -1,10 +1,12 @@
 #![doc = include_str!("../README.md")]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
+#![allow(clippy::module_name_repetitions)]
 #![feature(macro_metavar_expr)]
 
 #[macro_use]
 extern crate log;
+extern crate core;
 
 pub mod client;
 mod error;

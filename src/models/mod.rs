@@ -1,8 +1,9 @@
 mod channel;
 mod message;
 
+pub use channel::ChannelId;
 pub use id::Id;
-pub use message::{Message, MessageId};
+pub use message::{Message, MessageId, PartialMessage};
 pub use timestamp::Timestamp;
 
 #[macro_use]
@@ -54,7 +55,6 @@ pub(crate) mod id {
     }
 
     #[macro_export]
-    #[allow(clippy::module_name_repetitions)]
     macro_rules! id_type {
         (
             $(#[$meta:meta])*
@@ -186,4 +186,23 @@ pub mod timestamp {
             unimplemented!("ISO8601 parsing is not supported without the `chrono` feature");
         }
     }
+}
+
+#[macro_export]
+macro_rules! impl_common_traits {
+    ($t:ty) => {
+        impl PartialEq for $t {
+            fn eq(&self, other: &Self) -> bool {
+                self.id == other.id
+            }
+        }
+
+        impl Eq for $t {}
+
+        impl ::std::hash::Hash for $t {
+            fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+                self.id.hash(state)
+            }
+        }
+    };
 }

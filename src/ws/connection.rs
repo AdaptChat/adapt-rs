@@ -150,7 +150,7 @@ impl Connection {
             }
             event => {
                 let mut events = Vec::with_capacity(4);
-                populate(&self.context, event, &mut events);
+                populate(self.context.clone(), event, &mut events);
 
                 if !events.is_empty() {
                     debug!("Attempting to dispatch event");
