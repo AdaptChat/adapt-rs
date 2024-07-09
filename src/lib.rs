@@ -14,12 +14,16 @@ mod server;
 #[cfg(feature = "ws")]
 pub mod ws;
 
-pub use client::{Context, WithCtx};
+pub use client::{Client, ClientOptions, Context, WithCtx};
 pub use error::{Error, Result};
 pub use essence;
 pub use server::Server;
 
 pub mod prelude {
-    pub use super::client::{Context, WithCtx};
+    pub use super::client::{Client, ClientOptions, Context, WithCtx};
     pub use super::essence;
+    pub use super::models::Id;
+
+    #[cfg(feature = "ws")]
+    pub use super::ws::{EventConsumer, EventHandler, FallibleEventHandler};
 }

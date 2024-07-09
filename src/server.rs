@@ -1,3 +1,5 @@
+use crate::client::ClientOptions;
+
 /// A collection of URLs used when interacting with the Adapt API.
 #[derive(Copy, Clone, Debug)]
 #[must_use = "Server instances do nothing on their own"]
@@ -33,5 +35,13 @@ impl Server<'static> {
             harmony: "ws://localhost:8076",
             convey: "http://localhost:8078",
         }
+    }
+}
+
+impl<'a> Server<'a> {
+    /// Creates a new [`ClientOptions`] that uses the URLs specified in this server and will
+    /// authorize using the given token.
+    pub fn configure(&self, token: impl AsRef<str>) -> ClientOptions<'a> {
+        ClientOptions::from_server(token, *self)
     }
 }

@@ -194,6 +194,7 @@ impl Connection {
                         self.send_update_presence(status, custom_status).await?;
                     }
                     ConnectionAction::Close => {
+                        debug!("Received close action, shutting down connection...");
                         self.ws.close(None).await?;
                         return Ok(());
                     }

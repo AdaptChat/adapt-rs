@@ -32,3 +32,7 @@ chrono = ["dep:chrono"]
 [patch.crates-io.essence]
 git = "https://github.com/adaptchat/essence"
 branch = "main"
+
+[[example]]
+name = "ping_pong"
+required-features = ["tokio/rt-multi-thread"]

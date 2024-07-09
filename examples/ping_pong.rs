@@ -1,30 +1,3 @@
-# adapt-rs
-High-level wrapper around Adapt's API for Rust.
-
-## Installation
-
-Add the following to your `Cargo.toml`:
-
-```toml
-[dependencies]
-adapt = { git = "https://github.com/adaptchat/adapt-rs" }
-```
-
-### Cargo Features
-
-| Feature  | Default | Description                                                                                 |
-|----------|---------|---------------------------------------------------------------------------------------------|
-| `ws`     | Yes     | Enables receiving events over Harmony, Adapt's gateway.                                     |
-| `simd`   | No      | Enables SIMD speedups for JSON parsing via `simd-json`.                                     |
-| `chrono` | No      | Timestamps will be represented using `chrono::DateTime` instead of `std::time::SystemTime`. |
-
-## Requirements
-
-- Rust 1.80 **nightly** or later
-
-## Example
-
-```rust
 use adapt::models::Message;
 use adapt::prelude::*;
 
@@ -57,8 +30,10 @@ async fn main() -> adapt::Result<()> {
     let token = std::env::var("ADAPT_TOKEN").expect("No token found");
 
     // Create a new client with the token, register the event handler, and start the client
-    Client::from_token(&token).add_handler(Handler).start().await?;
+    Client::from_token(&token)
+        .add_handler(Handler)
+        .start()
+        .await?;
 
     Ok(())
 }
-```

@@ -8,7 +8,7 @@ pub mod handler;
 
 use crate::Context;
 use essence::models::{Device, PresenceStatus};
-use handler::{EventConsumer, EventConsumerErased};
+use handler::EventConsumerErased;
 use secrecy::{ExposeSecret, SecretString};
 use std::sync::Arc;
 use tokio::sync::{
@@ -21,6 +21,7 @@ pub use connection::Connection;
 pub use error::{Error, Result};
 pub use essence::ws::{InboundMessage as OutboundMessage, OutboundMessage as InboundMessage};
 pub use event::Event;
+pub use handler::{EventConsumer, EventHandler, FallibleEventHandler};
 
 #[derive(Clone)]
 pub(super) struct PartialIdentify {
@@ -91,8 +92,6 @@ pub(super) type ConsumerVec = Arc<Mutex<Vec<Arc<dyn EventConsumerErased>>>>;
 pub struct Client {
     /// Connect options to use when connecting to the gateway.
     options: ConnectOptions,
-    /// The context template for models originating from this client.
-    pub(crate) context: Context,
     /// Event consumers for incoming events.
     pub(crate) consumers: ConsumerVec,
 }
@@ -100,10 +99,9 @@ pub struct Client {
 impl Client {
     /// Creates a new client with the given connect options.
     #[must_use = "must call `start` to connect to the gateway"]
-    pub fn new(options: ConnectOptions, context: Context) -> Self {
+    pub fn new(options: ConnectOptions) -> Self {
         Self {
             options,
-            context,
             consumers: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -117,20 +115,20 @@ impl Client {
     }
 
     /// Starts and maintains a connection to the gateway.
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn start(&self, mut context: Context) -> Result<()> {
         let (client_tx, mut client_rx) = channel(1024);
 
         'a: loop {
             let (runner_tx, runner_rx) = channel(1024);
             let messenger = Messenger(runner_tx);
-            self.context.ws = Some(messenger.clone());
+            context.ws = Some(messenger.clone());
 
             let mut connection = Connection::new(
                 self.options.clone(),
                 client_tx.clone(),
                 runner_rx,
                 self.consumers.clone(),
-                self.context.clone(),
+                context.clone(),
             )
             .await?;
 
@@ -161,7 +159,7 @@ impl Client {
             }
         }
 
-        self.context.ws = None;
+        context.ws = None;
         Ok(())
     }
 }

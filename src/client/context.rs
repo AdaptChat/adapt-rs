@@ -1,4 +1,5 @@
 use crate::http::Http;
+#[cfg(feature = "ws")]
 use crate::ws::Messenger;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
