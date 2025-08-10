@@ -7,6 +7,7 @@ use crate::ws;
 use crate::{http::Http, Result, Server};
 use essence::models::{Device, PresenceStatus};
 use std::sync::Arc;
+#[cfg(feature = "ws")]
 use tokio::sync::Mutex;
 
 pub use context::{Context, WithCtx};
@@ -126,8 +127,22 @@ impl Client {
 
         Self {
             http: Arc::new(http),
+            #[cfg(feature = "ws")]
             ws,
         }
+    }
+
+    /// Sets the event consumer for the client.
+    #[cfg(feature = "ws")]
+    pub fn set_consumer(&mut self, consumer: impl ws::EventConsumer + 'static) {
+        self.ws.consumer = Arc::new(Mutex::new(consumer));
+    }
+
+    /// Sets the client's event consumer to the given consumer, and then returns the client.
+    #[cfg(feature = "ws")]
+    pub fn with_consumer(mut self, consumer: impl ws::EventConsumer + 'static) -> Self {
+        self.set_consumer(consumer);
+        self
     }
 
     /// Starts the client, connecting to the gateway and initializing the cache.

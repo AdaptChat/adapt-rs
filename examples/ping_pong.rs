@@ -29,9 +29,10 @@ async fn main() -> adapt::Result<()> {
     // Get the bot token from environment variables
     let token = std::env::var("ADAPT_TOKEN").expect("No token found");
 
-    // Create a new client with the token, register the event handler, and start the client
-    Client::from_token(&token)
-        .add_handler(Handler)
+    // Create a new client builder with the token, register the event handler, and start the client
+    ClientOptions::new(&token)
+        .consumer(Handler)
+        .into_client()
         .start()
         .await?;
 
