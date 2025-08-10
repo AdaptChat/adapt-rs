@@ -57,7 +57,7 @@ async fn main() -> adapt::Result<()> {
     let token = std::env::var("ADAPT_TOKEN").expect("No token found");
 
     // Create a new client with the token, register the event handler, and start the client
-    Client::from_token(&token).add_handler(Handler).start().await?;
+    Client::from_token(&token).with_consumer(Handler).start().await?;
 
     Ok(())
 }
