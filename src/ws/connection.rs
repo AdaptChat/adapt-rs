@@ -1,11 +1,11 @@
 use super::{
-    ClientAction, ConnectOptions, ConnectionAction, ConsumerVec, Error, InboundMessage,
+    ClientAction, ConnectOptions, ConnectionAction, Consumer, Error, InboundMessage,
     OutboundMessage, PartialIdentify, Result,
 };
 use crate::ws::event::populate;
 use crate::Context;
 use essence::models::PresenceStatus;
-use futures_util::{future::JoinAll, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use rmp_serde::to_vec_named;
 use secrecy::SecretString;
 use std::time::{Duration, Instant};
@@ -32,7 +32,7 @@ pub struct Connection {
     #[allow(dead_code)]
     client_tx: Sender<ClientAction>,
     runner_rx: Receiver<ConnectionAction>,
-    consumers: ConsumerVec,
+    consumer: Consumer,
     context: Context,
 }
 
@@ -53,7 +53,7 @@ impl Connection {
         mut options: ConnectOptions,
         client_tx: Sender<ClientAction>,
         runner_rx: Receiver<ConnectionAction>,
-        consumers: ConsumerVec,
+        consumer: Consumer,
         context: Context,
     ) -> Result<Self> {
         options.url.set_query(Some("format=msgpack"));
@@ -80,7 +80,7 @@ impl Connection {
             latency: None,
             client_tx,
             runner_rx,
-            consumers,
+            consumer,
             context,
         })
     }
@@ -154,14 +154,10 @@ impl Connection {
 
                 if !events.is_empty() {
                     debug!("Attempting to dispatch event");
-                    let consumers = timeout(Self::ACQUIRE_TIMEOUT, self.consumers.lock()).await;
+                    let consumers = timeout(Self::ACQUIRE_TIMEOUT, self.consumer.lock()).await;
                     if let Ok(mut consumers) = consumers {
                         for event in events {
-                            consumers
-                                .iter_mut()
-                                .map(|consumer| consumer.dyn_handle_event(event.clone()))
-                                .collect::<JoinAll<_>>()
-                                .await;
+                            consumers.dyn_handle_event(event).await;
                         }
                     } else {
                         warn!("Could not acquire lock to dispatch event");

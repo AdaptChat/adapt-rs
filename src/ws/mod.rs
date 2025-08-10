@@ -85,33 +85,26 @@ impl Messenger {
     }
 }
 
-pub(super) type ConsumerVec = Arc<Mutex<Vec<Arc<dyn EventConsumerErased>>>>;
+pub(super) type Consumer = Arc<Mutex<dyn EventConsumerErased>>;
 
 /// A client for interacting with harmony, Adapt's gateway.
 #[derive(Clone)]
 pub struct Client {
     /// Connect options to use when connecting to the gateway.
     options: ConnectOptions,
-    /// Event consumers for incoming events.
-    pub(crate) consumers: ConsumerVec,
+    /// Event consumer for incoming events.
+    pub(crate) consumer: Consumer,
 }
 
 impl Client {
     /// Creates a new client with the given connect options.
     #[must_use = "must call `start` to connect to the gateway"]
-    pub fn new(options: ConnectOptions) -> Self {
-        Self {
-            options,
-            consumers: Arc::new(Mutex::new(Vec::new())),
-        }
+    pub fn new(options: ConnectOptions, consumer: impl EventConsumer + 'static) -> Self {
+        Self::from_wrapped_consumer(options, Arc::new(Mutex::new(consumer)))
     }
 
-    /// Registers an event consumer to receive incoming events.
-    pub fn add_consumer(&self, consumer: impl EventConsumer + 'static) {
-        self.consumers
-            .try_lock()
-            .expect("poison")
-            .push(Arc::new(consumer));
+    pub(crate) fn from_wrapped_consumer(options: ConnectOptions, consumer: Consumer) -> Self {
+        Self { options, consumer }
     }
 
     /// Starts and maintains a connection to the gateway.
@@ -127,7 +120,7 @@ impl Client {
                 self.options.clone(),
                 client_tx.clone(),
                 runner_rx,
-                self.consumers.clone(),
+                self.consumer.clone(),
                 context.clone(),
             )
             .await?;

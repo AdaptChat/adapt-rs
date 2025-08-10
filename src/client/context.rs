@@ -21,12 +21,9 @@ pub struct Context {
 impl Context {
     /// Creates an ad-hoc [`Context`] from an HTTP client.
     pub fn from_http(http: Arc<Http>) -> Self {
-        Self {
-            http,
-            ws: None,
-        }
+        Self { http, ws: None }
     }
-    
+
     /// Returns a reference to the HTTP client, used to make requests to the REST API.
     #[must_use]
     pub const fn http(&self) -> &Arc<Http> {

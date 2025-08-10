@@ -297,7 +297,7 @@ impl Http {
 
     /// Creates a new outgoing HTTP request to the given endpoint. The request takes and returns raw
     /// models from [`essence`].
-    pub fn request<E: Endpoint>(&self, endpoint: E) -> Request<E> {
+    pub fn request<E: Endpoint>(&self, endpoint: E) -> Request<'_, E> {
         let token = self.token.expose_secret();
         Request::new(&self.client, &self.server, endpoint).header(AUTHORIZATION, token)
     }

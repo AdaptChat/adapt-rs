@@ -7,6 +7,7 @@ use crate::ws;
 use crate::{http::Http, Result, Server};
 use essence::models::{Device, PresenceStatus};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub use context::{Context, WithCtx};
 
@@ -21,6 +22,9 @@ pub struct ClientOptions<'a> {
     /// The options for connecting to the gateway.
     #[cfg(feature = "ws")]
     pub ws_options: ws::ConnectOptions,
+    /// The event consumer for handling events from the gateway.
+    #[cfg(feature = "ws")]
+    pub(crate) ws_consumer: ws::Consumer,
 }
 
 impl<'a> ClientOptions<'a> {
@@ -31,6 +35,8 @@ impl<'a> ClientOptions<'a> {
             server,
             #[cfg(feature = "ws")]
             ws_options: ws::ConnectOptions::new(token),
+            #[cfg(feature = "ws")]
+            ws_consumer: Arc::new(Mutex::new(ws::handler::from_fn(|_| async {}))),
         }
     }
 
@@ -54,6 +60,24 @@ impl<'a> ClientOptions<'a> {
     #[inline]
     pub fn device(mut self, device: Device) -> Self {
         self.ws_options = self.ws_options.device(device);
+        self
+    }
+
+    /// Sets the event consumer, which will receive events from the gateway.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use adapt::ws::handler;
+    ///
+    /// let client = adapt::ClientOptions::new("token")
+    ///     .consumer(handler::from_fn(|event| async {
+    ///         println!("Received event: {:?}", event);
+    ///     }))
+    ///     .into_client();
+    /// ```
+    #[cfg(feature = "ws")]
+    pub fn consumer(mut self, consumer: impl ws::EventConsumer + 'static) -> Self {
+        self.ws_consumer = Arc::new(Mutex::new(consumer));
         self
     }
 
@@ -98,19 +122,12 @@ impl Client {
         let http = Http::from_token_and_uri(&options.token, options.server);
 
         #[cfg(feature = "ws")]
-        let ws = ws::Client::new(options.ws_options);
+        let ws = ws::Client::from_wrapped_consumer(options.ws_options, options.ws_consumer);
 
         Self {
             http: Arc::new(http),
             ws,
         }
-    }
-
-    /// Adds a new event consumer to the client.
-    #[cfg(feature = "ws")]
-    pub fn add_handler(&self, handler: impl ws::EventConsumer + 'static) -> &Self {
-        self.ws.add_consumer(handler);
-        self
     }
 
     /// Starts the client, connecting to the gateway and initializing the cache.

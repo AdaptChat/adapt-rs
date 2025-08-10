@@ -7,7 +7,7 @@ use crate::{models::Message, Context, WithCtx};
 /// Represents a generic event consumer for gateway dispatch events.
 pub trait EventConsumer: Send + Sync {
     /// Called when a dispatch event is received.
-    fn handle_event(&self, event: Event) -> impl Future<Output = ()> + Send;
+    fn handle_event(&mut self, event: Event) -> impl Future<Output = ()> + Send;
 }
 
 struct FnConsumer<F>(F);
@@ -17,7 +17,7 @@ where
     F: Fn(Event) -> Fut + Send + Sync,
     Fut::IntoFuture: Send,
 {
-    async fn handle_event(&self, event: Event) {
+    async fn handle_event(&mut self, event: Event) {
         (self.0)(event).await;
     }
 }
@@ -48,8 +48,8 @@ macro_rules! impl_compound_handlers {
         where
             $($t: EventConsumer),*
         {
-            async fn handle_event(&self, event: Event) {
-                tokio::join!($($t::handle_event(&self.${index()}, event.clone())),*);
+            async fn handle_event(&mut self, event: Event) {
+                tokio::join!($($t::handle_event(&mut self.${index()}, event.clone())),*);
             }
         }
     }
@@ -58,11 +58,11 @@ macro_rules! impl_compound_handlers {
 all_the_tuples!(impl_compound_handlers);
 
 pub(crate) trait EventConsumerErased: Send + Sync {
-    fn dyn_handle_event(&self, event: Event) -> BoxFuture<()>;
+    fn dyn_handle_event(&mut self, event: Event) -> BoxFuture<'_, ()>;
 }
 
 impl<T: EventConsumer> EventConsumerErased for T {
-    fn dyn_handle_event(&self, event: Event) -> BoxFuture<()> {
+    fn dyn_handle_event(&mut self, event: Event) -> BoxFuture<'_, ()> {
         Box::pin(EventConsumer::handle_event(self, event))
     }
 }
@@ -102,12 +102,12 @@ macro_rules! define_event_handlers {
             type Error: Send;
 
             /// Called when an error occurs while processing an event within this event handler.
-            fn on_error(&self, error: Self::Error) -> impl Future<Output = ()> + Send;
+            fn on_error(&mut self, error: Self::Error) -> impl Future<Output = ()> + Send;
 
             $(
                 $(#[$doc])*
                 fn $name(
-                    &self,
+                    &mut self,
                     $($param: $ty),*
                 ) -> impl Future<Output = Result<(), Self::Error>> + Send {
                     async {
@@ -119,7 +119,7 @@ macro_rules! define_event_handlers {
         }
 
         impl<E: FallibleEventHandler> EventConsumer for E {
-            async fn handle_event(&self, event: Event) {
+            async fn handle_event(&mut self, event: Event) {
                 use Event::*;
 
                 #[allow(unreachable_patterns)]
@@ -140,7 +140,7 @@ macro_rules! define_event_handlers {
         pub trait EventHandler: Send + Sync {
             $(
                 $(#[$doc])*
-                fn $name(&self, $($param: $ty),*) -> impl Future<Output = ()> + Send {
+                fn $name(&mut self, $($param: $ty),*) -> impl Future<Output = ()> + Send {
                     async {
                         let _ = ($($param),*);
                     }
@@ -151,11 +151,11 @@ macro_rules! define_event_handlers {
         impl<E: EventHandler> FallibleEventHandler for E {
             type Error = ();
 
-            async fn on_error(&self, _: Self::Error) {}
+            async fn on_error(&mut self, _: Self::Error) {}
 
             $(
                 $(#[$doc])*
-                async fn $name(&self, $($param: $ty),*) -> Result<(), Self::Error> {
+                async fn $name(&mut self, $($param: $ty),*) -> Result<(), Self::Error> {
                     EventHandler::$name(self, $($param),*).await;
                     Ok(())
                 }
